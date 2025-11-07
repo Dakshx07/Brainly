@@ -2,11 +2,12 @@ import express from "express"
 import mongoose from "mongoose"
 import jwt from "jsonwebtoken"
 import "dotenv/config";
-import {contentModel, userModel} from "./db.ts"
-import { JWT_USER_PASSWORD } from "./config.js";
-import {userSchema,contentSchema,tagsSchema,linkSchema} from "./validators/validation.ts"
-import bcrypt from "bcrypt"
-import { hash } from "crypto";
+// CORRECT
+import { contentModel, userModel } from "./db.js";                    // .ts file
+import { JWT_USER_PASSWORD } from "./config.js";                  // .js file
+import { userSchema } from "./validators/validation.js";             // .ts file
+import bcrypt from "bcrypt";
+import { createHash } from "crypto";
 
 const app=express()
 app.use(express.json())
@@ -15,12 +16,11 @@ const PORT=process.env.PORT || 3000
 
 app.post('/api/v1/signup',async (req,res) => {
     const parsed=userSchema.safeParse(req.body)
-    if(!parsed.success){
-        return res.status(400).json({
-            message:parsed.error.issues[0].message
-        })
-         
-    }
+    if (!parsed.success) {
+        return res.status(400).json({ 
+            message: parsed.error.issues[0]?.message || "Validation failed" 
+    });
+}
 
 
     const {username, password}=parsed.data
@@ -48,77 +48,72 @@ app.post('/api/v1/signup',async (req,res) => {
     }
 })
 
-app.post('/api/v1/signin',async (req,res) => {
-    const parsed=userSchema.safeParse(req.body)
-    if(!parsed.success){
-        return res.status(400).json({
-            message:parsed.error.issues[0].message
-        })
+app.post('/api/v1/signin', async (req, res) => {
+  const parsed = userSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ 
+      message: parsed.error.issues[0]?.message || "Validation failed" 
+    });
+  }
+
+  const { username, password } = parsed.data;
+  if (!username || !password) {
+    return res.status(400).json({
+      message: 'Username and password are required'
+    });
+  }
+
+  try {
+    const user = await userModel.findOne({ username });
+    if (!user) {
+      return res.status(403).json({ message: "Incorrect credentials" });
     }
 
-    const {username, password}=parsed.data
-    if(!username || !password){
-        return res.status(400).json({
-            message:'Username and password are required'
-        })
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(403).json({ message: "Incorrect credentials" });
     }
 
-    try {
-        const existingUser=await userModel.findOne({
-            username:username,
-            password:password
-        })
+    const token = jwt.sign(
+      { _id: user._id.toString() },
+      JWT_USER_PASSWORD,
+      { expiresIn: '1h' }
+    );
 
-        if(!existingUser){
-            res.status(403).json({ message: "Incorrect credentials" });
-            return
-        }
-
-        const isMatch=await bcrypt.compare(password,existingUser.password)
-        if(!isMatch){
-             res.status(403).json({ message: "Incorrect credentials" });
-            return
-        }
-
-        if(existingUser){
-            const token = jwt.sign({
-                _id:existingUser._id
-            },JWT_USER_PASSWORD,{expiresIn:'1h'})
-
-        res.json({
-            token:token
-        })
-        }
-    } catch (error) {
-        res.status(403).json({ message: "Incorrect credentials" });
-    }
-})
+    return res.json({ token });
+  } catch (error) {
+    console.error("Signin error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
 
 
-app.get('/api/v1/content',async (req,res) => {
-    const {link,Type,title} = req.body
-    if(!link || !Type || !title){
-        res.status(400).json({
-            message:'Link, Type and title are required'
-        })
-    }
+app.post("/api/v1/content", async (req, res) => {
+  console.log("CONTENT ROUTE HIT:", req.body);
 
-    try {
-        await contentModel.create({
-            link:link,
-            Type:Type,
-            title:title
-        })
+  const { link, Type, title, userId } = req.body;
 
-        res.json({
-            message:'Content created successfully'
-        })
-    } catch (error) {
-        res.status(500).json({
-            message:'Error creating content'
-        })
-    }
-})
+  if (!link || !Type || !title || !userId) {
+    return res.status(400).json({
+      message: "link, Type, title, and userId are required"
+    });
+  }
+
+  try {
+    await contentModel.create({
+      link,
+      Type,
+      title,
+      userId
+    });
+    return res.json({ message: "Content created successfully" });
+  } catch (error: any) {
+    console.error("Content error:", error);
+    return res.status(500).json({ 
+      message: error.message || "Error creating content" 
+    });
+  }
+});
 
 //to bring all the content of a user in bulk
 app.get('/api/v1/content/bulk',async (req,res) => {
