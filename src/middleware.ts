@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken"
 import { JWT_USER_PASSWORD } from "./config.js";
 export const userMiddleware = (req: Request,res : Response,next : NextFunction) => {
     const token=req.headers['authorization']
-
+Store sensitive configuration like JWT secrets in environment variables. Access them using `process.env.JWT_USER_PASSWORD`. Ensure environment variables are managed securely and are not committed to version control.
     if(!token){
         return res.status(401).json({
             message:'No token provided'
