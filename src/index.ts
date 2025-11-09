@@ -3,11 +3,13 @@ import mongoose from "mongoose"
 import jwt from "jsonwebtoken"
 import "dotenv/config";
 // CORRECT
-import { contentModel, userModel } from "./db.js";                    // .ts file
-import { JWT_USER_PASSWORD } from "./config.js";                  // .js file
-import { userSchema } from "./validators/validation.js";             // .ts file
-import bcrypt from "bcrypt";
-import { createHash } from "crypto";
+import { contentModel, linkModel, userModel } from "./db.js";                   
+import { JWT_USER_PASSWORD } from "./config.js";                 
+import { userSchema } from "./validators/validation.js";            
+import bcrypt, { compare } from "bcrypt";
+import { userMiddleware } from "./middleware.js";
+import { random } from "./utlis.js";
+import { hash } from "crypto";
 
 const app=express()
 app.use(express.json())
@@ -88,80 +90,161 @@ app.post('/api/v1/signin', async (req, res) => {
 });
 
 
-app.post("/api/v1/content", async (req, res) => {
-  console.log("CONTENT ROUTE HIT:", req.body);
+app.post("/api/v1/content", userMiddleware, async (req: any, res) => {
+  const { link, Type, title } = req.body;
 
-  const { link, Type, title, userId } = req.body;
-
-  if (!link || !Type || !title || !userId) {
+  // VALIDATE INPUT
+  if (!link || !Type || !title) {
     return res.status(400).json({
-      message: "link, Type, title, and userId are required"
+      message: "link, Type, and title are required"
     });
   }
 
   try {
-    await contentModel.create({
+    const newContent = await contentModel.create({
       link,
       Type,
       title,
-      userId
+      userId: req.userId  // ← THIS IS THE KEY
     });
-    return res.json({ message: "Content created successfully" });
+
+    return res.json({
+      message: "Content created successfully",
+      contentId: newContent._id.toString()
+    });
   } catch (error: any) {
     console.error("Content error:", error);
-    return res.status(500).json({ 
-      message: error.message || "Error creating content" 
+    return res.status(500).json({
+      message: error.message || "Error creating content"
     });
   }
 });
 
-//to bring all the content of a user in bulk
-app.get('/api/v1/content/bulk',async (req,res) => {
-    const {link,Type,title,tags} = req.body
-    if(!link || !Type || !title || !tags){
-        res.status(400).json({
-            message:'Link, Type, title and tags are required'
+app.get('/api/v1/content/bulk', userMiddleware, async (req: any, res) => {
+  try {
+    const content = await contentModel.find({ userId: req.userId }).populate("userId","username");
+
+    return res.json({
+      content
+    });
+  } catch (error) {
+    console.error("Bulk fetch error:", error);
+    return res.status(500).json({
+      message: "Error fetching content"
+    });
+  }
+});
+
+
+app.delete('/api/v1/delete',userMiddleware, async (req: any, res) => {
+  const { contentId } = req.body;
+
+  if (!contentId) {
+    return res.status(400).json({
+      message: 'Content ID is required'
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(contentId)) {
+    return res.status(400).json({ message: 'Invalid content ID' });
+  }
+
+  try {
+    const result = await contentModel.deleteOne({
+      _id: new mongoose.Types.ObjectId(contentId),    
+      userId: req.userId      
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        message: 'Content not found or already deleted'
+      });
+    }
+
+    return res.json({
+      message: 'Content deleted successfully'
+    });
+  } catch (error) {
+    console.error("Delete error:", error);
+    return res.status(500).json({
+      message: 'Error deleting content'
+    });
+  }
+});
+
+
+app.post('/api/v1/brain/share',async (req: any,res) => {
+    const share=req.body.shareLink
+   try {
+     if(share){
+         const existingLinks=await linkModel.findOne({
+             userId:req.userId
+         })
+ 
+         if(existingLinks){
+             return res.json({
+                 message:'Link already exists',
+                 hash: existingLinks.hash
+             })
+         }
+
+         const hashLink = random(16)
+         await linkModel.create({
+            userId:req.userId,
+            hash:hashLink
+         })
+         req.json({
+            message:'Updated Link successfully',
+            hashLink
+         })
+
+     }else{
+        await linkModel.deleteOne({
+            userId:req.userId
         })
-    }
-
-    try {
-        
-    } catch (error) {
-        
-    }
-})
-
-
-
-app.delete('/api/v1/delete',async (req,res) => {
-    const {userId} = req.body
-
-    if(!userId){
-        res.status(400).json({
-            message:'User ID is required'
-        })
-    }
-
-    try {
-        await contentModel.deleteOne({userId:userId})
 
         res.json({
-            message:'Content deleted successfully'
+            message:'Link deleted successfully'
+
         })
-    } catch (error) {
-        res.status(500).json({
-            message:'Error deleting content'
+     }
+     
+   } catch (error) {
+        console.error(error);
+        return res.status(500).json({ msg: "Something went wrong" });
+   }
+})
+
+app.post('/api/v1/brain/:shareLink',async (req,res) => {
+    const shareLink=req.params.shareLink
+
+    const link=await linkModel.findOne({
+        hash
+    })
+
+    if(!link){
+        return res.status(404).json({
+            message:'Link not found'
         })
     }
-})
 
+    const content=await contentModel.findOne({
+       userId:link.userId
+    })
+    const user=await userModel.findOne({
+       _id:link.userId
+    })
 
-app.post('/api/v1/brain/share',(req,res) => {
-    const {userId, hash}= req.body
-})
+    if(!user){
+        return res.status(404).json({
+            message:'User not found'
+        })
+    }
 
-app.post('/api/v1/brain/:shareLink',(req,res) => {
-
+    res.json({
+        username:user.username,
+        content
+    })
 })
 
 async function main(){

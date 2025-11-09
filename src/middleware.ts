@@ -13,7 +13,7 @@ export const userMiddleware = (req: Request,res : Response,next : NextFunction) 
     try {
         const decode=jwt.verify(token,JWT_USER_PASSWORD) as {_id:string}
         //@ts-ignore
-        req.userID = decode._id
+        req.userId = decode._id
         next()
     } catch (error) {
         return res.status(401).json({
