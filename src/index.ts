@@ -9,7 +9,7 @@ import { userSchema } from "./validators/validation.js";
 import bcrypt, { compare } from "bcrypt";
 import { userMiddleware } from "./middleware.js";
 import { random } from "./utlis.js";
-import { hash } from "crypto";
+
 
 const app=express()
 app.use(express.json())
@@ -173,78 +173,77 @@ app.delete('/api/v1/delete',userMiddleware, async (req: any, res) => {
 });
 
 
-app.post('/api/v1/brain/share',async (req: any,res) => {
-    const share=req.body.shareLink
-   try {
-     if(share){
-         const existingLinks=await linkModel.findOne({
-             userId:req.userId
-         })
- 
-         if(existingLinks){
-             return res.json({
-                 message:'Link already exists',
-                 hash: existingLinks.hash
-             })
-         }
+app.post('/api/v1/brain/share',userMiddleware,async (req: any,res) => {
+   const share=req.body.share
+    if(share){
+      const existingLink=await linkModel.findOne({
+        userId:req.userId
+      })
 
-         const hashLink = random(16)
-         await linkModel.create({
-            userId:req.userId,
-            hash:hashLink
-         })
-         req.json({
-            message:'Updated Link successfully',
-            hashLink
-         })
-
-     }else{
-        await linkModel.deleteOne({
-            userId:req.userId
+      if(existingLink){
+        return res.json({
+          message:'Link already exists',
+          hash: existingLink.hash
         })
-
+      }
+      
+      const hash=random(10)
+      await linkModel.create({
+        userId:req.userId,
+        hash:hash
+      })
         res.json({
-            message:'Link deleted successfully'
+        message:'updated shareable link',
+        hash:hash
+    })
+    }else{
+      await linkModel.deleteOne({
+        userId:req.userId
+      })
+      res.json({
+      message:'Link updated successfully'
+    })
+    }
 
-        })
-     }
-     
-   } catch (error) {
-        console.error(error);
-        return res.status(500).json({ msg: "Something went wrong" });
-   }
+    
 })
 
-app.post('/api/v1/brain/:shareLink',async (req,res) => {
-    const shareLink=req.params.shareLink
+app.get('/api/v1/brain/:shareLink',userMiddleware,async (req,res) => {
+    const hash=req.params.shareLink
 
     const link=await linkModel.findOne({
-        hash
+      hash:hash
     })
 
     if(!link){
-        return res.status(404).json({
-            message:'Link not found'
-        })
+       res.status(404).json({
+        message:'Link not found'
+      })
+      return
     }
 
     const content=await contentModel.findOne({
-       userId:link.userId
+      userId:link.userId
     })
     const user=await userModel.findOne({
-       _id:link.userId
+      _id:link.userId
     })
 
-    if(!user){
-        return res.status(404).json({
-            message:'User not found'
-        })
+    if(!user || !content){
+      res.status(404).json({
+        message:'User or Content not found'
+      })
+      return  
     }
 
     res.json({
-        username:user.username,
-        content
-    })
+      username:user.username,
+      content
+    }) 
+
+
+
+
 })
 
 async function main(){

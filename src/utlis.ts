@@ -1,9 +1,10 @@
 export function random(len : number){
-    let options = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let options='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    let length=options.length
+    let ans=''
 
-    let result=''
     for(let i=0;i<len;i++){
-        result += options[Math.floor(Math.random() * len)]
+        ans += options[Math.floor((Math.random()*length))]
     }
-    return result
+    return ans
 }
