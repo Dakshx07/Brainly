@@ -1,4 +1,4 @@
-{
+Verify that the target Node.js version for development and deployment is indeed v24.10.0 or higher. If a lower version is required, adjust the `@types/node` version accordingly.
   "name": "brainly",
   "version": "1.0.0",
   "main": "index.js",
